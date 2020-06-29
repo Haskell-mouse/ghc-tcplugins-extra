@@ -47,6 +47,7 @@ import Data.Maybe (mapMaybe)
 #if __GLASGOW_HASKELL__ < 711
 import BasicTypes (TopLevelFlag (..))
 #endif
+#if __GLASGOW_HASKELL__ < 810
 #if MIN_VERSION_ghc(8,5,0)
 import CoreSyn    (Expr(..))
 #endif
@@ -57,8 +58,16 @@ import Name       (Name)
 import OccName    (OccName)
 import Outputable (($$), (<+>), empty, ppr, text)
 import Panic      (panicDoc)
-#if __GLASGOW_HASKELL__ >= 711
+#else 
+import GHC.Core (Expr(..))
+#endif
+
+#if __GLASGOW_HASKELL__ >= 711 
+#if __GLASGOW_HASKELL__ < 810
 import TcEvidence (EvTerm (..))
+#else 
+import GHC.Tc.Types.Evidence (EvTerm (..))
+#endif 
 #else
 import TcEvidence (EvTerm (..), TcCoercion (..))
 import TcMType    (newEvVar)
@@ -70,22 +79,40 @@ import TcRnTypes  (Ct, CtEvidence (..), CtLoc, TcIdBinder (..), TcLclEnv (..),
                    TcPlugin (..), TcPluginResult (..), ctEvLoc,
                    ctLocEnv, setCtLocEnv)
 #else
+#if __GLASGOW_HASKELL__ < 810
 import TcPluginM  (FindResult (..), TcPluginM, lookupOrig, tcPluginTrace)
 import qualified  TcPluginM
 import qualified  Finder
+#else 
+import GHC.Tc.Plugin (FindResult (..), TcPluginM, lookupOrig, tcPluginTrace)
+import GHC.Utils.Panic 
+import GHC.Utils.Outputable
+import GHC.Core.Coercion
+import qualified GHC.Tc.Plugin as TcPluginM
+import qualified GHC.Driver.Finder as Finder
+#endif
 #if __GLASGOW_HASKELL__ < 809
 import TcRnTypes  (CtEvidence (..), CtLoc,
                    TcPlugin (..), TcPluginResult (..))
 #else
+#if __GLASGOW_HASKELL__ < 810
 import TcRnTypes  (TcPlugin (..), TcPluginResult (..))
+#else 
+import GHC.Tc.Types (TcPlugin (..), TcPluginResult (..))
+#endif
 #endif
 #endif
 #if __GLASGOW_HASKELL__ < 802
 import TcPluginM  (tcPluginIO)
 #endif
-#if __GLASGOW_HASKELL__ >= 711
+#if __GLASGOW_HASKELL__ >= 711 
+#if __GLASGOW_HASKELL__ < 810
 import TyCoRep    (UnivCoProvenance (..))
 import Type       (PredType, Type)
+#else 
+import GHC.Core.TyCo.Rep (UnivCoProvenance (..))
+import GHC.Core.Type     (PredType, Type)
+#endif
 #else
 import Type       (EqRel (..), PredTree (..), PredType, Type, classifyPredType)
 import Var        (varType)
@@ -95,22 +122,39 @@ import Data.Function (on)
 import Data.List     (groupBy, partition, sortOn)
 #if __GLASGOW_HASKELL__ < 809
 import TcRnTypes     (Ct (..), ctLoc, ctEvId, mkNonCanonical)
-#else
+#else 
+#if __GLASGOW_HASKELL__ < 810
 import Constraint
   (Ct (..), CtEvidence (..), CtLoc, ctLoc, ctEvId, mkNonCanonical)
-#endif
 import TcType        (TcTyVar, TcType)
+#else 
+import GHC.Tc.Types.Constraint 
+  (Ct (..), CtEvidence (..), CtLoc, ctLoc, ctEvId, mkNonCanonical)
+import GHC.Tc.Utils.TcType (TcTyVar, TcType)
+#endif
+#endif
 #if __GLASGOW_HASKELL__ < 809
 import Type          (mkPrimEqPred)
-#else
+#else 
+#if __GLASGOW_HASKELL__ < 810
 import Predicate     (mkPrimEqPred)
+#endif 
 #endif
 #if __GLASGOW_HASKELL__ < 711
 import TcRnTypes     (ctEvTerm)
 import TypeRep       (Type (..))
 #else
-import Data.Maybe    (mapMaybe)
+import Data.Maybe    (mapMaybe) 
+#if __GLASGOW_HASKELL__ < 810
 import TyCoRep       (Type (..))
+#else 
+import GHC.Core.TyCo.Rep (Type (..))
+import GHC.Unit.Types (Module)
+import GHC.Types.Name (Name)
+import GHC.Types.Name.Occurrence (OccName (..))
+import GHC.Unit.Module.Name (ModuleName)
+import GHC.Data.FastString (FastString (..), fsLit)
+#endif
 #endif
 
 -- workaround for https://ghc.haskell.org/trac/ghc/ticket/10301
@@ -389,7 +433,10 @@ substType _subst t@(ForAllTy _tv _ty) =
   -- TODO: Is it safe to do "dumb" substitution under binders?
   -- ForAllTy tv (substType subst ty)
   t
-#if __GLASGOW_HASKELL__ >= 809
+#if __GLASGOW_HASKELL__ >= 811
+substType subst (FunTy af t1 t2 t3) =
+  FunTy af (substType subst t1) (substType subst t2) (substType subst t3)
+#elif __GLASGOW_HASKELL__ >= 809
 substType subst (FunTy af t1 t2) =
   FunTy af (substType subst t1) (substType subst t2)
 #elif __GLASGOW_HASKELL__ >= 802
